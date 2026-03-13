@@ -1,4 +1,4 @@
 export const configDev = () => ({
   environment: 'development',
-  MONGO_URI: 'mongodb+srv://vidya:5fn97rrJKwprgMeZ@cluster0.h3efao5.mongodb.net/?appName=Cluster0',
+  MONGO_URI: 'mongodb://localhost:27017/Honey',
 });

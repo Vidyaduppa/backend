@@ -7,28 +7,41 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { configDev } from './configuration/config.dev';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { OrdersModule } from './orders/orders.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: `.env`,
-      load: [configDev], // only loading configDev for now
+      load: [configDev],
     }),
 
-    // MongoDB connection
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGO_URI'), // reads from configDev
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        uri: configService.get<string>('MONGO_URI'),
+        connectionFactory: (connection) => {
+          console.log(
+            `[MongoDB] Connected to ${connection.host}:${connection.port}/${connection.name}`,
+          );
+          return connection;
+        },
       }),
     }),
 
     HoneyEcommerceModule,
     BillingModule,
+    UsersModule,
+    AuthModule,
+    OrdersModule,
+    FeedbackModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
