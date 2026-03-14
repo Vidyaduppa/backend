@@ -6,7 +6,7 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('analytics')
-  getAnalytics(): unknown {
+  getAnalytics(): Promise<unknown> {
     return this.adminService.getAnalytics();
   }
 }

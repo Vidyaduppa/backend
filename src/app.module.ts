@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AdminModule } from './admin/admin.module';
+import { AdminAuthModule } from './admin-auth/admin-auth.module';
 
 @Module({
   imports: [
@@ -30,6 +31,15 @@ import { AdminModule } from './admin/admin.module';
           console.log(
             `[MongoDB] Connected to ${connection.host}:${connection.port}/${connection.name}`,
           );
+          connection.on('error', (error: { message?: string; code?: unknown }) => {
+            const code =
+              error && typeof error === 'object' && 'code' in error
+                ? String((error as { code?: unknown }).code)
+                : 'unknown';
+            console.error(
+              `[MongoDB] Connection error (code=${code}): ${error?.message ?? 'unknown'}`,
+            );
+          });
           return connection;
         },
       }),
@@ -42,6 +52,7 @@ import { AdminModule } from './admin/admin.module';
     OrdersModule,
     FeedbackModule,
     AdminModule,
+    AdminAuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

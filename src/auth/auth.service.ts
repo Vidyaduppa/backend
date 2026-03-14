@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import * as bcrypt from 'bcrypt';
+import { Model } from 'mongoose';
+import { User, UserDocument } from './schemas/user.schema';
 
 interface AuthRegisterRequest {
   name: string;
@@ -18,10 +22,6 @@ interface AuthUser {
   role: 'user' | 'admin';
 }
 
-interface StoredUser extends AuthUser {
-  password: string;
-}
-
 interface AuthResponse {
   accessToken: string;
   refreshToken?: string;
@@ -30,74 +30,92 @@ interface AuthResponse {
 
 @Injectable()
 export class AuthService {
-  private users: StoredUser[] = [
-    {
-      id: 'admin-1',
-      name: 'Admin',
-      email: 'admin@shop.local',
-      password: 'Admin@123',
-      role: 'admin',
-    },
-  ];
-  private currentUser: AuthUser | null = null;
+  private currentUserId: string | null = null;
 
-  register(payload: unknown): AuthResponse {
+  constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
+
+  async register(payload: unknown): Promise<AuthResponse> {
     const body = payload as AuthRegisterRequest;
-    const created: StoredUser = {
-      id: `u${Date.now()}`,
+    const existing = await this.userModel.findOne({ email: body.email }).lean();
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 10);
+    const created = await this.userModel.create({
       name: body.name,
       email: body.email,
-      password: body.password,
+      passwordHash,
       role: 'user',
-    };
+      status: 'active',
+    });
 
-    this.users.push(created);
-    this.currentUser = {
-      id: created.id,
-      name: created.name,
-      email: created.email,
-      role: created.role,
-    };
-
-    return {
-      accessToken: `access-${Date.now()}`,
-      refreshToken: `refresh-${Date.now()}`,
-      user: this.currentUser,
-    };
+    return this.issueAuthForUser(created);
   }
 
-  login(payload: unknown): AuthResponse {
+  async login(payload: unknown): Promise<AuthResponse> {
     const body = payload as AuthLoginRequest;
-    const user = this.users.find(
-      (item) => item.email === body.email && item.password === body.password,
-    );
+    const user = await this.userModel.findOne({ email: body.email });
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    this.currentUser = {
-      id: user.id,
+    const ok = await bcrypt.compare(body.password, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return this.issueAuthForUser(user);
+  }
+
+  logout(): void {
+    this.currentUserId = null;
+  }
+
+  async me(): Promise<AuthUser> {
+    const user = await this.getCurrentUser();
+    if (!user) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+    return user;
+  }
+
+  async getCurrentUser(): Promise<AuthUser | null> {
+    if (!this.currentUserId) {
+      return null;
+    }
+    const user = await this.userModel.findById(this.currentUserId).lean();
+    if (!user) {
+      return null;
+    }
+    return {
+      id: String(user._id),
       name: user.name,
       email: user.email,
       role: user.role,
     };
+  }
 
+  async getCurrentUserId(): Promise<string> {
+    const user = await this.getCurrentUser();
+    if (!user) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+    return user.id;
+  }
+
+  issueAuthForUser(user: UserDocument): AuthResponse {
+    this.currentUserId = String(user._id);
     return {
       accessToken: `access-${Date.now()}`,
       refreshToken: `refresh-${Date.now()}`,
-      user: this.currentUser,
+      user: {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     };
-  }
-
-  logout(): void {
-    this.currentUser = null;
-  }
-
-  me(): AuthUser {
-    if (!this.currentUser) {
-      throw new UnauthorizedException('Not authenticated');
-    }
-    return this.currentUser;
   }
 }

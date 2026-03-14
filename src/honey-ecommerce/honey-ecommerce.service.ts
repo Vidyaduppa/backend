@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Product as ProductEntity, ProductDocument } from './schemas/product.schema';
 
 type ProductCategory = 'all' | 'raw' | 'organic' | 'infused' | 'specialty';
 type PriceFilter = 'all' | 'under15' | '15to25' | 'over25';
@@ -33,81 +36,103 @@ type UpdateProductRequest = Partial<CreateProductRequest>;
 
 @Injectable()
 export class HoneyEcommerceService {
-  private products: Product[] = [];
+  constructor(
+    @InjectModel(ProductEntity.name)
+    private readonly productModel: Model<ProductDocument>,
+  ) {}
 
-  getProducts(query: ProductQuery): Product[] {
+  async getProducts(query: ProductQuery): Promise<Product[]> {
     const term = (query.q ?? '').trim().toLowerCase();
     const category = (query.category ?? 'all') as ProductCategory;
     const price = (query.price ?? 'all') as PriceFilter;
     const sortBy = (query.sortBy ?? 'featured') as SortBy;
 
-    let filtered = this.products.filter((product) => {
-      const matchesTerm =
-        !term ||
-        product.name.toLowerCase().includes(term) ||
-        product.description.toLowerCase().includes(term);
-      const matchesCategory = category === 'all' || product.category === category;
-      const matchesPrice =
-        price === 'all' ||
-        (price === 'under15' && product.price < 15) ||
-        (price === '15to25' && product.price >= 15 && product.price <= 25) ||
-        (price === 'over25' && product.price > 25);
-
-      return matchesTerm && matchesCategory && matchesPrice;
-    });
-
-    if (sortBy === 'price-low') filtered = [...filtered].sort((a, b) => a.price - b.price);
-    if (sortBy === 'price-high') filtered = [...filtered].sort((a, b) => b.price - a.price);
-    if (sortBy === 'name') filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-    if (sortBy === 'rating') filtered = [...filtered].sort((a, b) => b.rating - a.rating);
-    if (sortBy === 'featured') {
-      filtered = [...filtered].sort((a, b) => Number(b.featured) - Number(a.featured));
+    const filter: Record<string, unknown> = {};
+    if (term) {
+      filter.$or = [
+        { name: { $regex: term, $options: 'i' } },
+        { description: { $regex: term, $options: 'i' } },
+      ];
     }
+    if (category !== 'all') {
+      filter.category = category;
+    }
+    if (price === 'under15') filter.price = { $lt: 15 };
+    if (price === '15to25') filter.price = { $gte: 15, $lte: 25 };
+    if (price === 'over25') filter.price = { $gt: 25 };
 
-    return filtered;
+    const sort: Record<string, 1 | -1> = {};
+    if (sortBy === 'price-low') sort.price = 1;
+    if (sortBy === 'price-high') sort.price = -1;
+    if (sortBy === 'name') sort.name = 1;
+    if (sortBy === 'rating') sort.rating = -1;
+    if (sortBy === 'featured') sort.featured = -1;
+
+    const products = await this.productModel.find(filter).sort(sort).lean();
+    return products.map((product) => ({
+      id: String(product._id),
+      name: product.name,
+      description: product.description,
+      category: product.category as Exclude<ProductCategory, 'all'>,
+      price: product.price,
+      rating: product.rating,
+      featured: product.featured,
+    }));
   }
 
-  createProduct(payload: unknown): Product {
+  async createProduct(payload: unknown): Promise<Product> {
     const body = payload as CreateProductRequest;
-    const product: Product = {
-      id: `p${Date.now()}`,
+    const created = await this.productModel.create({
       name: body.name,
       description: body.description,
       category: body.category,
       price: Number(body.price),
       rating: 0,
       featured: Boolean(body.featured),
+    });
+    return {
+      id: String(created._id),
+      name: created.name,
+      description: created.description,
+      category: created.category as Exclude<ProductCategory, 'all'>,
+      price: created.price,
+      rating: created.rating,
+      featured: created.featured,
     };
-    this.products.unshift(product);
-    return product;
   }
 
-  updateProduct(id: string, payload: unknown): Product {
+  async updateProduct(id: string, payload: unknown): Promise<Product> {
     const body = payload as UpdateProductRequest;
-    const index = this.products.findIndex((item) => item.id === id);
+    const updated = await this.productModel
+      .findByIdAndUpdate(
+        id,
+        {
+          ...body,
+          ...(body.price === undefined ? {} : { price: Number(body.price) }),
+          ...(body.featured === undefined
+            ? {}
+            : { featured: Boolean(body.featured) }),
+        },
+        { new: true },
+      )
+      .lean();
 
-    if (index === -1) {
+    if (!updated) {
       throw new NotFoundException('Product not found');
     }
 
-    const updated: Product = {
-      ...this.products[index],
-      ...body,
-      price:
-        body.price === undefined
-          ? this.products[index].price
-          : Number(body.price),
-      featured:
-        body.featured === undefined
-          ? this.products[index].featured
-          : Boolean(body.featured),
+    return {
+      id: String(updated._id),
+      name: updated.name,
+      description: updated.description,
+      category: updated.category as Exclude<ProductCategory, 'all'>,
+      price: updated.price,
+      rating: updated.rating,
+      featured: updated.featured,
     };
-
-    this.products[index] = updated;
-    return updated;
   }
 
-  deleteProduct(id: string): void {
-    this.products = this.products.filter((item) => item.id !== id);
+  async deleteProduct(id: string): Promise<void> {
+    await this.productModel.findByIdAndDelete(id);
   }
 }

@@ -11,22 +11,22 @@ export class HoneyEcommerceController {
     @Query('category') category?: string,
     @Query('price') price?: string,
     @Query('sortBy') sortBy?: string,
-  ) {
+  ): Promise<unknown> {
     return this.honeyEcommerceService.getProducts({ q, category, price, sortBy });
   }
 
   @Post()
-  createProduct(@Body() payload: unknown) {
+  createProduct(@Body() payload: unknown): Promise<unknown> {
     return this.honeyEcommerceService.createProduct(payload);
   }
 
   @Put(':id')
-  updateProduct(@Param('id') id: string, @Body() payload: unknown) {
+  updateProduct(@Param('id') id: string, @Body() payload: unknown): Promise<unknown> {
     return this.honeyEcommerceService.updateProduct(id, payload);
   }
 
   @Delete(':id')
-  deleteProduct(@Param('id') id: string) {
-    this.honeyEcommerceService.deleteProduct(id);
+  deleteProduct(@Param('id') id: string): Promise<void> {
+    return this.honeyEcommerceService.deleteProduct(id);
   }
 }

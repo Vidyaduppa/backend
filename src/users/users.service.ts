@@ -1,4 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { User, UserDocument } from '../auth/schemas/user.schema';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
 
 export interface UserProfile {
   name: string;
@@ -21,41 +25,83 @@ interface AdminUserSummary {
 
 @Injectable()
 export class UsersService {
-  private profile: UserProfile = {
-    name: '',
-    email: '',
-    address: '',
-  };
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+  ) {}
 
-  private users: AdminUserSummary[] = [];
-
-  getUserProfile(): UserProfile {
-    return this.profile;
+  async getUserProfile(userId: string): Promise<UserProfile> {
+    const user = await this.userModel.findById(userId).lean();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return {
+      name: user.name,
+      email: user.email,
+      address: user.address ?? '',
+    };
   }
 
-  updateUserProfile(profile: unknown): UserProfile {
-    this.profile = { ...(profile as UserProfile) };
-    return this.profile;
-  }
+  async updateUserProfile(userId: string, profile: unknown): Promise<UserProfile> {
+    const body = profile as UserProfile;
+    const updated = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          name: body.name,
+          email: body.email,
+          address: body.address ?? '',
+        },
+        { new: true },
+      )
+      .lean();
 
-  getUsers(): AdminUserSummary[] {
-    return this.users;
-  }
-
-  updateUserStatus(id: string, payload: unknown): AdminUserSummary {
-    const body = payload as UpdateUserStatusRequest;
-    const index = this.users.findIndex((user) => user.id === id);
-
-    if (index === -1) {
+    if (!updated) {
       throw new NotFoundException('User not found');
     }
 
-    const updated = {
-      ...this.users[index],
-      status: body.status,
+    return {
+      name: updated.name,
+      email: updated.email,
+      address: updated.address ?? '',
     };
+  }
 
-    this.users[index] = updated;
-    return updated;
+  async getUsers(): Promise<AdminUserSummary[]> {
+    const users = await this.userModel.find().sort({ createdAt: -1 }).lean();
+    const counts = await this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ]);
+    const orderCounts = new Map(counts.map((item) => [String(item._id), item.count]));
+
+    return users.map((user) => ({
+      id: String(user._id),
+      name: user.name,
+      email: user.email,
+      status: user.status,
+      orders: orderCounts.get(String(user._id)) ?? 0,
+      joinedAt: user.createdAt?.toISOString() ?? new Date().toISOString(),
+    }));
+  }
+
+  async updateUserStatus(id: string, payload: unknown): Promise<AdminUserSummary> {
+    const body = payload as UpdateUserStatusRequest;
+    const updated = await this.userModel
+      .findByIdAndUpdate(id, { status: body.status }, { new: true })
+      .lean();
+
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+
+    const orders = await this.orderModel.countDocuments({ userId: updated._id });
+    return {
+      id: String(updated._id),
+      name: updated.name,
+      email: updated.email,
+      status: updated.status,
+      orders,
+      joinedAt: updated.createdAt?.toISOString() ?? new Date().toISOString(),
+    };
   }
 }

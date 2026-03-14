@@ -6,12 +6,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(@Body() payload: unknown): unknown {
+  register(@Body() payload: unknown): Promise<unknown> {
     return this.authService.register(payload);
   }
 
   @Post('login')
-  login(@Body() payload: unknown): unknown {
+  login(@Body() payload: unknown): Promise<unknown> {
     return this.authService.login(payload);
   }
 
@@ -21,7 +21,7 @@ export class AuthController {
   }
 
   @Get('me')
-  me(): unknown {
+  me(): Promise<unknown> {
     return this.authService.me();
   }
 }
