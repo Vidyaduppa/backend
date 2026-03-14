@@ -10,6 +10,7 @@ type SortBy = 'featured' | 'price-low' | 'price-high' | 'name' | 'rating';
 export interface Product {
   id: string;
   name: string;
+  imageUrl?: string;
   description: string;
   category: Exclude<ProductCategory, 'all'>;
   price: number;
@@ -29,6 +30,7 @@ interface CreateProductRequest {
   price: number;
   category: Exclude<ProductCategory, 'all'>;
   description: string;
+  imageUrl?: string;
   featured?: boolean;
 }
 
@@ -72,6 +74,7 @@ export class HoneyEcommerceService {
     return products.map((product) => ({
       id: String(product._id),
       name: product.name,
+      imageUrl: product.imageUrl,
       description: product.description,
       category: product.category as Exclude<ProductCategory, 'all'>,
       price: product.price,
@@ -86,6 +89,7 @@ export class HoneyEcommerceService {
       name: body.name,
       description: body.description,
       category: body.category,
+      imageUrl: body.imageUrl,
       price: Number(body.price),
       rating: 0,
       featured: Boolean(body.featured),
@@ -93,6 +97,7 @@ export class HoneyEcommerceService {
     return {
       id: String(created._id),
       name: created.name,
+      imageUrl: created.imageUrl,
       description: created.description,
       category: created.category as Exclude<ProductCategory, 'all'>,
       price: created.price,
@@ -124,6 +129,7 @@ export class HoneyEcommerceService {
     return {
       id: String(updated._id),
       name: updated.name,
+      imageUrl: updated.imageUrl,
       description: updated.description,
       category: updated.category as Exclude<ProductCategory, 'all'>,
       price: updated.price,
