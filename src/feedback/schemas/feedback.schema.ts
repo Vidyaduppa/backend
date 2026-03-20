@@ -11,6 +11,9 @@ export class Feedback {
   @Prop({ required: true, min: 1, max: 5 })
   rating: number;
 
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
+  productId: Types.ObjectId;
+
   @Prop({ required: true, trim: true })
   category: string;
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UnauthorizedException } from '@nestjs/common';
 import { FeedbackService } from './feedback.service';
 import { AuthService } from '../auth/auth.service';
 
@@ -17,6 +17,9 @@ export class FeedbackController {
   @Post()
   async submitFeedback(@Body() payload: unknown): Promise<unknown> {
     const user = await this.authService.getCurrentUser();
-    return this.feedbackService.submitFeedback(payload, user?.id);
+    if (!user) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+    return this.feedbackService.submitFeedback(payload, user.id);
   }
 }
